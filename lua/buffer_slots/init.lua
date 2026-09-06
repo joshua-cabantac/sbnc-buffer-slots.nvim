@@ -1,0 +1,265 @@
+local M = {}
+
+local function is_file_buffer(buf)
+	return vim.api.nvim_buf_get_name(buf) ~= "" and vim.bo[buf].buflisted and vim.bo[buf].buftype == ""
+end
+
+local function insert_buffer(buffer)
+	-- only track real, named file buffers (skip [No Name], term://, scratch)
+	if not is_file_buffer(buffer) then
+		return
+	end
+	for index, value in ipairs(M.opened) do
+		if value == buffer then -- already tracked, don't duplicate
+			return
+		elseif value == -1 then
+			M.opened[index] = buffer
+			break
+		end
+	end
+end
+
+local function delete_buffer(buffer)
+	for index, value in ipairs(M.opened) do
+		if value == buffer then
+			M.opened[index] = -1
+			break
+		end
+	end
+end
+
+-- True if a buffer is an unnamed, unmodified, textless [No Name] buffer.
+local function is_empty_unnamed(buf)
+	if vim.api.nvim_buf_get_name(buf) ~= "" then
+		return false
+	end
+	if vim.bo[buf].modified then
+		return false -- never discard unsaved work
+	end
+	for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+		if line ~= "" then
+			return false
+		end
+	end
+	return true
+end
+
+-- Remove leftover blank [No Name] buffers (e.g. ones created by pressing an
+-- empty slot but never given a file). Never touches the current buffer.
+local function cleanup_empty_unnamed()
+	local cur = vim.api.nvim_get_current_buf()
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if buf ~= cur and vim.api.nvim_buf_is_valid(buf) and is_empty_unnamed(buf) then
+			pcall(vim.api.nvim_buf_delete, buf, { force = true })
+		end
+	end
+end
+
+function M.main()
+	M.opened = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
+	cleanup_empty_unnamed()
+
+	-- Assign slots to file buffers already open when the plugin (re)loads.
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		insert_buffer(buf)
+	end
+
+	vim.api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
+		callback = function(args)
+			insert_buffer(args.buf)
+		end,
+	})
+	vim.api.nvim_create_autocmd("BufDelete", {
+		callback = function(args)
+			delete_buffer(args.buf)
+		end,
+	})
+end
+
+local function switch_buffer(slot)
+	local bufnr = M.opened[slot]
+	if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) then
+		vim.api.nvim_set_current_buf(bufnr)
+		return
+	end
+
+	-- Empty or invalid slot: create a new blank (unnamed) listed buffer and bind
+	-- it to this slot. The user can then ':e somefile' to load a real file into it,
+	-- which stays in this slot thanks to the dedup in insert_buffer().
+	local newbuf = vim.api.nvim_create_buf(true, false) -- listed, blank, unnamed
+	M.opened[slot] = newbuf
+	vim.api.nvim_set_current_buf(newbuf)
+end
+
+-- Which slot currently holds the given buffer? Returns slot 1..10 or nil.
+local function slot_of(buffer)
+	for index, value in ipairs(M.opened) do
+		if value == buffer then
+			return index
+		end
+	end
+	return nil
+end
+
+-- Swap the buffer assignments of two slots.
+local function swap_slots(a, b)
+	if a == b then
+		return
+	end
+	M.opened[a], M.opened[b] = M.opened[b], M.opened[a]
+end
+
+-- Ask any subscribed UI (e.g. bufferline) to re-read the new slot order.
+-- IMPORTANT: we clear bufferline's custom_sort (a frozen snapshot) rather than
+-- calling bufferline.sort_by(), because sort_by() freezes the order via
+-- state.custom_sort and then bufferline permanently IGNORES our live
+-- compare_slots comparator. Clearing it makes bufferline fall back to
+-- options.sort_by (i.e. M.compare_slots) on every re-render.
+local function refresh_subscribers()
+	local ok, bstate = pcall(require, "bufferline.state")
+	if ok then
+		bstate.set({ custom_sort = vim.NIL })
+	end
+	vim.cmd.redrawtabline()
+end
+
+-- Swap the current buffer's slot with the target slot. If the current buffer
+-- is not tracked yet, place it into the target slot instead.
+local function swap_current_with(slot)
+	local cur = vim.api.nvim_get_current_buf()
+	local from = slot_of(cur)
+	if from then
+		swap_slots(from, slot)
+	else
+		M.opened[slot] = cur
+	end
+	refresh_subscribers()
+end
+
+local function get_file_buffers()
+	local buffers = {}
+
+	for i, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if is_file_buffer(buf) then
+			table.insert(buffers, buf)
+		end
+	end
+	table.sort(buffers)
+
+	return buffers
+end
+
+local function show_buffers()
+	vim.print(M.opened)
+end
+
+local function switch(buffer)
+	local buffers = get_file_buffers()
+	vim.api.nvim_set_current_buf(buffers[buffer])
+end
+
+-- Move to the next/previous file buffer (by buffer number). Wraps around.
+local function step_buffer(step)
+	local buffers = get_file_buffers()
+	if #buffers == 0 then
+		return
+	end
+	local cur = vim.api.nvim_get_current_buf()
+	local idx = 1
+	for i, buf in ipairs(buffers) do
+		if buf == cur then
+			idx = i
+			break
+		end
+	end
+	-- Move in direction, wrapping at both ends.
+	local n = #buffers
+	local next = ((idx - 1 + step) % n) + 1
+	vim.api.nvim_set_current_buf(buffers[next])
+end
+
+function M.setup()
+	vim.keymap.set("n", "<leader>1", function()
+		switch_buffer(1)
+	end, { desc = "Switch to buffer 1" })
+	vim.keymap.set("n", "<leader>2", function()
+		switch_buffer(2)
+	end, { desc = "Switch to buffer 2" })
+	vim.keymap.set("n", "<leader>3", function()
+		switch_buffer(3)
+	end, { desc = "Switch to buffer 3" })
+	vim.keymap.set("n", "<leader>4", function()
+		switch_buffer(4)
+	end, { desc = "Switch to buffer 4" })
+	vim.keymap.set("n", "<leader>5", function()
+		switch_buffer(5)
+	end, { desc = "Switch to buffer 5" })
+	vim.keymap.set("n", "<leader>6", function()
+		switch_buffer(6)
+	end, { desc = "Switch to buffer 6" })
+	vim.keymap.set("n", "<leader>7", function()
+		switch_buffer(7)
+	end, { desc = "Switch to buffer 7" })
+	vim.keymap.set("n", "<leader>8", function()
+		switch_buffer(8)
+	end, { desc = "Switch to buffer 8" })
+	vim.keymap.set("n", "<leader>9", function()
+		switch_buffer(9)
+	end, { desc = "Switch to buffer 9" })
+	vim.keymap.set("n", "<leader>0", function()
+		switch_buffer(10)
+	end, { desc = "Switch to buffer 10" })
+
+	-- Swap current slot with slot <number> (leader bs<number>)
+	for slot = 1, 9 do
+		vim.keymap.set("n", "<leader>bs" .. slot, function()
+			swap_current_with(slot)
+		end, { desc = "Swap current buffer with slot " .. slot })
+	end
+	vim.keymap.set("n", "<leader>bs0", function()
+		swap_current_with(10)
+	end, { desc = "Swap current buffer with slot 10" })
+
+	vim.keymap.set("n", "<leader>bl", function()
+		show_buffers()
+	end, {
+		desc = "List buffers",
+	})
+
+	vim.keymap.set("n", "<leader>bn", function()
+		step_buffer(1)
+	end, { desc = "Next file buffer" })
+	vim.keymap.set("n", "<leader>bp", function()
+		step_buffer(-1)
+	end, { desc = "Previous file buffer" })
+end
+M.main()
+
+--- Comparator for bufferline: order buffers by their slot position (1..10).
+--- Buffers not in any slot sort after all slotted ones, ordered by bufnr.
+---@param bufnr_a integer
+---@param bufnr_b integer
+---@return boolean true if bufnr_a should appear before bufnr_b
+function M.compare_slots(bufnr_a, bufnr_b)
+	local sa = slot_of(bufnr_a)
+	local sb = slot_of(bufnr_b)
+	if sa and sb then
+		return sa < sb
+	end
+	if sa then
+		return true -- a is in a slot, b is not
+	end
+	if sb then
+		return false
+	end
+	return bufnr_a < bufnr_b
+end
+
+--- Return the slot number (1..10) holding a buffer, or nil if not tracked.
+---@param bufnr integer
+---@return integer? slot
+function M.slot_for(bufnr)
+	return slot_of(bufnr)
+end
+
+return M
