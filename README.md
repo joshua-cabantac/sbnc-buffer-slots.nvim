@@ -9,13 +9,11 @@ automatically as you open them, and the bufferline reflects the slot order.
 - **Automatic tracking** — open buffers are assigned slots `1..10` in the order
   they're opened. Already-open buffers are claimed on startup/reload, so there's
   nothing to add or pin manually.
-- **Switch by slot** — `<leader>1`..`<leader>9` and `<leader>0` jump to the
-  buffer in that slot. Pressing an empty slot opens a fresh blank buffer you can
-  `:e <file>` into.
-- **Swap slots** — `<leader>bs<number>` swaps the current buffer's slot with the
-  target slot.
-- **Next / previous** — `<leader>bn` / `<leader>bp` step through file buffers.
-- **List** — `<leader>bl` prints the current slot assignments.
+- **Switch by slot** — jump to the buffer in a slot. Pressing an empty slot
+  opens a fresh blank buffer you can `:e <file>` into.
+- **Swap slots** — swap the current buffer's slot with another.
+- **Next / previous** — step through file buffers.
+- **List** — print the current slot assignments.
 
 ## Requirements
 
@@ -26,53 +24,58 @@ automatically as you open them, and the bufferline reflects the slot order.
 **lazy.nvim:**
 
 ```lua
-{ "yourname/buffer-slots.nvim", config = function() require("buffer_slots").setup() end }
+{ "yourname/buffer-slots.nvim" }
 ```
 
 Or straight into your config:
 
 ```lua
-require("buffer_slots").setup()
+require("buffer_slots")
 ```
 
-Calling `setup()` registers the keymaps. The autocommands (buffer tracking)
-and slot prefill run automatically on `require` — there is no separate init to
-call.
+The buffer tracking (autocommands) and slot prefill run automatically on
+`require`. **No keymaps are registered by default** — add your own below.
 
-## Keybindings
+## Provided actions
 
-| Key | Action |
-|-----|--------|
-| `<leader>1`..`<leader>9`, `<leader>0` | Switch to the buffer in slot 1–10 |
-| `<leader>bs1`..`<leader>bs9`, `<leader>bs0` | Swap current buffer with that slot |
-| `<leader>bn` | Next file buffer |
-| `<leader>bp` | Previous file buffer |
-| `<leader>bl` | Show slot assignments |
+The plugin exposes these functions (they don't bind any keys):
 
-> `<leader>` defaults to Space in this config.
+| Function | Action |
+|----------|--------|
+| `switch(slot)` | Jump to the buffer in slot 1–10 (empty slot opens a blank buffer) |
+| `swap(slot)` | Swap the current buffer's slot with that slot |
+| `next()` | Switch to the next file buffer |
+| `prev()` | Switch to the previous file buffer |
+| `list()` | Show slot assignments |
 
-## Default configuration
+## Example configuration (author's bindings)
 
-These are the bindings the plugin ships with — the author's own layout. They
-are just a starting point: since they're plain `vim.keymap.set` calls, you can
-copy this block and change any key to suit you, and a later mapping overrides
-an earlier one. The *actions* are fixed; the *keys* are yours.
+This is the layout the author uses. Copy it and change the keys to taste — the
+actions are fixed, the keys are yours.
 
 ```lua
--- Minimal default config
-require("buffer_slots").setup()
+local slots = require("buffer_slots")
 
--- The default keys, if you want a copy you can tweak:
---   <leader>1 .. <leader>0      switch to slot 1..10
---   <leader>bs<number>          swap current buffer with that slot
---   <leader>bn / <leader>bp     next / previous file buffer
---   <leader>bl                  show slot assignments
+-- Switch to slot 1..10
+for i = 1, 9 do
+  vim.keymap.set("n", "<leader>" .. i, function() slots.switch(i) end,
+    { desc = "Switch to buffer " .. i })
+end
+vim.keymap.set("n", "<leader>0", function() slots.switch(10) end,
+  { desc = "Switch to buffer 10" })
 
--- Example of remapping to your own taste (define after setup()):
--- vim.keymap.set("n", "<leader>a", function()
---   local b = require("buffer_slots").opened[1]
---   if b and vim.api.nvim_buf_is_valid(b) then vim.api.nvim_set_current_buf(b) end
--- end, { desc = "Jump to slot 1" })
+-- Swap current buffer with slot 1..10
+for i = 1, 9 do
+  vim.keymap.set("n", "<leader>bs" .. i, function() slots.swap(i) end,
+    { desc = "Swap current buffer with slot " .. i })
+end
+vim.keymap.set("n", "<leader>bs0", function() slots.swap(10) end,
+  { desc = "Swap current buffer with slot 10" })
+
+-- Next / previous / list
+vim.keymap.set("n", "<leader>bn", slots.next, { desc = "Next file buffer" })
+vim.keymap.set("n", "<leader>bp", slots.prev, { desc = "Previous file buffer" })
+vim.keymap.set("n", "<leader>bl", slots.list, { desc = "List slots" })
 ```
 
 ## How buffers are counted
@@ -90,17 +93,8 @@ are automatically:
 - **prefixed with their slot number** (e.g. `3 main.lua`).
 
 This is optional — bufferline is not a dependency. The sort/number hooks are
-wired through `require("buffer_slots")`'s exported `compare_slots` and
-`slot_for`, and degrade gracefully if bufferline isn't installed.
-
-## Development
-
-The entry point is `lua/buffer_slots/init.lua`. After editing, restart Neovim to
-reload, or run:
-
-```vim
-:lua package.loaded['buffer_slots'] = nil; require('buffer_slots').setup()
-```
+wired through the exported `compare_slots` and `slot_for`, and degrade
+gracefully if bufferline isn't installed.
 
 ## References
 

@@ -178,61 +178,38 @@ local function step_buffer(step)
 	vim.api.nvim_set_current_buf(buffers[next])
 end
 
-function M.setup()
-	vim.keymap.set("n", "<leader>1", function()
-		switch_buffer(1)
-	end, { desc = "Switch to buffer 1" })
-	vim.keymap.set("n", "<leader>2", function()
-		switch_buffer(2)
-	end, { desc = "Switch to buffer 2" })
-	vim.keymap.set("n", "<leader>3", function()
-		switch_buffer(3)
-	end, { desc = "Switch to buffer 3" })
-	vim.keymap.set("n", "<leader>4", function()
-		switch_buffer(4)
-	end, { desc = "Switch to buffer 4" })
-	vim.keymap.set("n", "<leader>5", function()
-		switch_buffer(5)
-	end, { desc = "Switch to buffer 5" })
-	vim.keymap.set("n", "<leader>6", function()
-		switch_buffer(6)
-	end, { desc = "Switch to buffer 6" })
-	vim.keymap.set("n", "<leader>7", function()
-		switch_buffer(7)
-	end, { desc = "Switch to buffer 7" })
-	vim.keymap.set("n", "<leader>8", function()
-		switch_buffer(8)
-	end, { desc = "Switch to buffer 8" })
-	vim.keymap.set("n", "<leader>9", function()
-		switch_buffer(9)
-	end, { desc = "Switch to buffer 9" })
-	vim.keymap.set("n", "<leader>0", function()
-		switch_buffer(10)
-	end, { desc = "Switch to buffer 10" })
+--- Public API: action functions. No keymaps are registered by default.
+-- Register your own keys, e.g.:
+--   vim.keymap.set("n", "<leader>1", function() require("buffer_slots").switch(1) end)
 
-	-- Swap current slot with slot <number> (leader bs<number>)
-	for slot = 1, 9 do
-		vim.keymap.set("n", "<leader>bs" .. slot, function()
-			swap_current_with(slot)
-		end, { desc = "Swap current buffer with slot " .. slot })
-	end
-	vim.keymap.set("n", "<leader>bs0", function()
-		swap_current_with(10)
-	end, { desc = "Swap current buffer with slot 10" })
-
-	vim.keymap.set("n", "<leader>bl", function()
-		show_buffers()
-	end, {
-		desc = "List buffers",
-	})
-
-	vim.keymap.set("n", "<leader>bn", function()
-		step_buffer(1)
-	end, { desc = "Next file buffer" })
-	vim.keymap.set("n", "<leader>bp", function()
-		step_buffer(-1)
-	end, { desc = "Previous file buffer" })
+--- Switch to the buffer in `slot` (1..10). Empty/invalid slots open a new blank
+--- buffer bound to that slot.
+---@param slot integer
+function M.switch(slot)
+	switch_buffer(slot)
 end
+
+--- Swap the current buffer's slot with `slot` (1..10).
+---@param slot integer
+function M.swap(slot)
+	swap_current_with(slot)
+end
+
+--- Switch to the next file buffer (wraps around).
+function M.next()
+	step_buffer(1)
+end
+
+--- Switch to the previous file buffer (wraps around).
+function M.prev()
+	step_buffer(-1)
+end
+
+--- Print the current slot assignments.
+function M.list()
+	show_buffers()
+end
+
 M.main()
 
 --- Comparator for bufferline: order buffers by their slot position (1..10).
