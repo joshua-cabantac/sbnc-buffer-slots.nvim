@@ -51,6 +51,30 @@ call.
 
 > `<leader>` defaults to Space in this config.
 
+## Default configuration
+
+These are the bindings the plugin ships with — the author's own layout. They
+are just a starting point: since they're plain `vim.keymap.set` calls, you can
+copy this block and change any key to suit you, and a later mapping overrides
+an earlier one. The *actions* are fixed; the *keys* are yours.
+
+```lua
+-- Minimal default config
+require("buffer_slots").setup()
+
+-- The default keys, if you want a copy you can tweak:
+--   <leader>1 .. <leader>0      switch to slot 1..10
+--   <leader>bs<number>          swap current buffer with that slot
+--   <leader>bn / <leader>bp     next / previous file buffer
+--   <leader>bl                  show slot assignments
+
+-- Example of remapping to your own taste (define after setup()):
+-- vim.keymap.set("n", "<leader>a", function()
+--   local b = require("buffer_slots").opened[1]
+--   if b and vim.api.nvim_buf_is_valid(b) then vim.api.nvim_set_current_buf(b) end
+-- end, { desc = "Jump to slot 1" })
+```
+
 ## How buffers are counted
 
 A buffer is only tracked if it is a real, named file buffer: it has a non-empty
