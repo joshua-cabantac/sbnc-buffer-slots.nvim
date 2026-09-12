@@ -74,6 +74,9 @@ function M.main()
 			delete_buffer(args.buf)
 		end,
 	})
+
+	-- Auto-integrate with bufferline.nvim (no-op if it isn't installed).
+	M.integrate_bufferline()
 end
 
 local function switch_buffer(slot)
@@ -208,6 +211,58 @@ end
 --- Print the current slot assignments.
 function M.list()
 	show_buffers()
+end
+
+--- Automatically integrate with bufferline.nvim if it is installed: tabs are
+--- sorted by slot number and prefixed with it. Works regardless of load order
+--- because it wraps bufferline.setup() so the hooks merge into any setup() call,
+--- and re-applies them if bufferline was already configured before this ran.
+--- No-ops when bufferline is not installed.
+function M.integrate_bufferline()
+	local ok, bufferline = pcall(require, "bufferline")
+	if not ok or type(bufferline.setup) ~= "function" then
+		return false
+	end
+	if bufferline.__sbnc_hooks then
+		return true -- already integrated
+	end
+
+	local hooks = {
+		sort_by = function(a, b)
+			return M.compare_slots(a.id, b.id)
+		end,
+		name_formatter = function(buf)
+			local slot = M.slot_for(buf.bufnr)
+			return slot and (slot .. " " .. buf.name) or buf.name
+		end,
+	}
+
+	local orig_setup = bufferline.setup
+	bufferline.setup = function(conf)
+		conf = vim.tbl_deep_extend("force", conf or {}, { options = hooks })
+		return orig_setup(conf)
+	end
+	bufferline.__sbnc_hooks = true
+
+	-- bufferline already set up before we loaded: re-apply with the user's own
+	-- config merged in so the hooks take effect now, not just on a later setup().
+	local active = vim.o.tabline and vim.o.tabline:find("nvim_bufferline", 1, true)
+	if active then
+		local ok_cfg, bconfig = pcall(require, "bufferline.config")
+		local user = ok_cfg and bconfig.get() and bconfig.get().user
+		orig_setup(vim.tbl_deep_extend("force", user or {}, { options = hooks }))
+	end
+	return true
+end
+
+--- Optional setup. Currently only controls the bufferline integration.
+--- Call `require("sbnc_buffer_slots").setup({ bufferline = false })` to opt out.
+---@param opts { bufferline: boolean? }?
+function M.setup(opts)
+	opts = opts or {}
+	if opts.bufferline ~= false then
+		M.integrate_bufferline()
+	end
 end
 
 M.main()

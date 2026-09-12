@@ -2,7 +2,8 @@
 
 Jump between open file buffers by their slot position. Think of it as 10 quick
 "registers" for your buffers — **no manual marking needed**. Buffers are tracked
-automatically as you open them, and the bufferline reflects the slot order.
+automatically as you open them, and [bufferline.nvim](https://github.com/akinsho/bufferline.nvim)
+(if installed) automatically shows the tabs in slot order, prefixed by slot number.
 
 ## Features
 
@@ -14,6 +15,7 @@ automatically as you open them, and the bufferline reflects the slot order.
 - **Swap slots** — swap the current buffer's slot with another.
 - **Next / previous** — step through file buffers.
 - **List** — print the current slot assignments.
+- **bufferline integration** — tabs sorted + numbered by slot, automatic.
 
 ## Requirements
 
@@ -84,17 +86,24 @@ A buffer is only tracked if it is a real, named file buffer: it has a non-empty
 name, is listed, and is not a special buffer (`term://`, scratch, etc.). Empty
 `[No Name]` buffers created but never given a file are cleaned up on reload.
 
-## Optional: bufferline integration
+## bufferline integration (automatic)
 
-If you use [bufferline.nvim](https://github.com/akinsho/bufferline.nvim), tabs
-are automatically:
+If you use [bufferline.nvim](https://github.com/akinsho/bufferline.nvim), the
+plugin integrates with it **automatically** on load — no configuration needed:
 
-- **ordered by slot number** (slot 1 first), and
-- **prefixed with their slot number** (e.g. `3 main.lua`).
+- tabs are **ordered by slot number** (slot 1 first), and
+- each tab is **prefixed with its slot number** (e.g. `3 main.lua`), and
+- swapping slots (`<leader>bsN`) **re-sorts the tabline immediately**.
 
-This is optional — bufferline is not a dependency. The sort/number hooks are
-wired through the exported `compare_slots` and `slot_for`, and degrade
-gracefully if bufferline isn't installed.
+This works regardless of load order (before or after `bufferline.setup()`) and
+preserves the rest of your bufferline options. bufferline is **not** a
+dependency — the integration no-ops when it isn't installed.
+
+To opt out:
+
+```lua
+require("sbnc_buffer_slots").setup({ bufferline = false })
+```
 
 ## References
 
