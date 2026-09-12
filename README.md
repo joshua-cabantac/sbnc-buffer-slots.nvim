@@ -24,7 +24,7 @@ automatically as you open them, and the bufferline reflects the slot order.
 **lazy.nvim:**
 
 ```lua
-{ "yourname/sbnc-buffer-slots.nvim" }
+{ "joshua-cabantac/sbnc-buffer-slots.nvim", lazy = false },
 ```
 
 Or straight into your config:
