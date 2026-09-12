@@ -1,4 +1,4 @@
-# buffer-slots.nvim
+# sbnc-buffer-slots.nvim
 
 Jump between open file buffers by their slot position. Think of it as 10 quick
 "registers" for your buffers — **no manual marking needed**. Buffers are tracked
@@ -24,13 +24,13 @@ automatically as you open them, and the bufferline reflects the slot order.
 **lazy.nvim:**
 
 ```lua
-{ "yourname/buffer-slots.nvim" }
+{ "yourname/sbnc-buffer-slots.nvim" }
 ```
 
 Or straight into your config:
 
 ```lua
-require("buffer_slots")
+require("sbnc_buffer_slots")
 ```
 
 The buffer tracking (autocommands) and slot prefill run automatically on
@@ -54,7 +54,7 @@ This is the layout the author uses. Copy it and change the keys to taste — the
 actions are fixed, the keys are yours.
 
 ```lua
-local slots = require("buffer_slots")
+local slots = require("sbnc_buffer_slots")
 
 -- Switch to slot 1..10
 for i = 1, 9 do
