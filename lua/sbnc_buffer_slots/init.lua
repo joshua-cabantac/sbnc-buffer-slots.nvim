@@ -126,6 +126,39 @@ local function refresh_subscribers()
 	vim.cmd.redrawtabline()
 end
 
+-- Close the gaps between slots: move every tracked file buffer into the lowest
+-- slot numbers, preserving their relative order. Blank (unnamed) buffers are
+-- ignored — they don't count as content — and are pushed to the tail slots so
+-- they stay tracked but out of the way. Example: buffers in slots 1, 2, 8
+-- become 1, 2, 3.
+local function compact_slots()
+	local named, blanks, seen = {}, {}, {}
+	for _, bufnr in ipairs(M.opened) do
+		if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) and not seen[bufnr] then
+			seen[bufnr] = true
+			if is_file_buffer(bufnr) then
+				table.insert(named, bufnr)
+			else
+				table.insert(blanks, bufnr)
+			end
+		end
+	end
+	local next_slot = 1
+	for _, bufnr in ipairs(named) do
+		M.opened[next_slot] = bufnr
+		next_slot = next_slot + 1
+	end
+	for _, bufnr in ipairs(blanks) do
+		M.opened[next_slot] = bufnr
+		next_slot = next_slot + 1
+	end
+	while next_slot <= #M.opened do
+		M.opened[next_slot] = -1
+		next_slot = next_slot + 1
+	end
+	refresh_subscribers()
+end
+
 -- Swap the current buffer's slot with the target slot. If the current buffer
 -- is not tracked yet, place it into the target slot instead.
 local function swap_current_with(slot)
@@ -211,6 +244,14 @@ end
 --- Print the current slot assignments.
 function M.list()
 	show_buffers()
+end
+
+--- Close the gaps: reflow tracked buffers into slots 1..n in their current
+--- order. Only real file buffers count; blank (unnamed) buffers are pushed to
+--- the tail so they stay tracked. E.g. slots with buffers at 1, 2, 8 become
+--- 1, 2, 3.
+function M.compact()
+	compact_slots()
 end
 
 --- Automatically integrate with bufferline.nvim if it is installed: tabs are

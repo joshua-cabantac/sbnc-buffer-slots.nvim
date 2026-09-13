@@ -49,6 +49,7 @@ The plugin exposes these functions (they don't bind any keys):
 | `next()` | Switch to the next file buffer |
 | `prev()` | Switch to the previous file buffer |
 | `list()` | Show slot assignments |
+| `compact()` | Close the gaps between slots (see below) |
 
 ## Example configuration (author's bindings)
 
@@ -74,11 +75,20 @@ end
 vim.keymap.set("n", "<leader>bs0", function() slots.swap(10) end,
   { desc = "Swap current buffer with slot 10" })
 
--- Next / previous / list
+-- Next / previous / list / compact
 vim.keymap.set("n", "<leader>bn", slots.next, { desc = "Next file buffer" })
 vim.keymap.set("n", "<leader>bp", slots.prev, { desc = "Previous file buffer" })
 vim.keymap.set("n", "<leader>bl", slots.list, { desc = "List slots" })
+vim.keymap.set("n", "<leader>br", slots.compact, { desc = "Compact slots" })
 ```
+
+### Compacting (`compact()`)
+
+Swapping buffers around leaves gaps: slots `1, 2, 8` with three buffers.
+`compact()` closes those gaps — `1, 2, 8` becomes `1, 2, 3` — preserving the
+buffers' relative order. Only real file buffers count as content; blank
+(unnamed) buffers stay tracked but get pushed to the tail slots so they don't
+clutter the front.
 
 ## How buffers are counted
 
