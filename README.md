@@ -69,17 +69,14 @@ vim.keymap.set("n", "<leader>0", function() slots.switch(10) end,
 
 -- Swap current buffer with slot N: leader + shifted number row.
 -- NOTE: assumes a German/QWERTZ layout (! = Shift+1 ... = = Shift+0).
--- Shift+7 is '/', which the author keeps for grep — slot 7 falls back to bs7.
 local swap_keys = { ['1'] = '!', ['2'] = '"', ['3'] = '§', ['4'] = '$',
-  ['5'] = '%', ['6'] = '&', ['8'] = '(', ['9'] = ')' }
+  ['5'] = '%', ['6'] = '&', ['7'] = '/', ['8'] = '(', ['9'] = ')' }
 for slot, key in pairs(swap_keys) do
   vim.keymap.set("n", "<leader>" .. key, function() slots.swap(tonumber(slot)) end,
     { desc = "Swap current buffer with slot " .. slot })
 end
 vim.keymap.set("n", "<leader>=", function() slots.swap(10) end,
   { desc = "Swap current buffer with slot 10" })
-vim.keymap.set("n", "<leader>bs7", function() slots.swap(7) end,
-  { desc = "Swap current buffer with slot 7" })
 
 -- Next / previous / list / compact
 vim.keymap.set("n", "<leader>bn", slots.next, { desc = "Next file buffer" })
