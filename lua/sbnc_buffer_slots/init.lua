@@ -20,12 +20,21 @@ local function insert_buffer(buffer)
 end
 
 local function delete_buffer(buffer)
-	for index, value in ipairs(M.opened) do
-		if value == buffer then
-			M.opened[index] = -1
-			break
+	-- BufDelete fires when a buffer becomes unlisted too — and at that moment a
+	-- really-closed buffer is not yet invalid/unloaded. Defer the check until
+	-- after the event: a real close is then invalid/unloaded, while a mere
+	-- listing toggle leaves the buffer alive and loaded.
+	vim.schedule(function()
+		if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_buf_is_loaded(buffer) then
+			return
 		end
-	end
+		for index, value in ipairs(M.opened) do
+			if value == buffer then
+				M.opened[index] = -1
+				break
+			end
+		end
+	end)
 end
 
 -- True if a buffer is an unnamed, unmodified, textless [No Name] buffer.
@@ -170,6 +179,95 @@ local function swap_current_with(slot)
 		M.opened[slot] = cur
 	end
 	refresh_subscribers()
+end
+
+-- ---------------------------------------------------------------
+-- Slot manager: an oil-like scratch buffer whose lines ARE the slots.
+-- Reorder lines to reorder slots, delete a line to drop that buffer from
+-- its slot, write (:w) to apply. <CR> opens the buffer under the cursor,
+-- x closes (bdelete) the buffer under the cursor, q closes the window.
+-- ---------------------------------------------------------------
+local manager_bufnr = nil
+
+local function manager_render(buf)
+	local lines = {}
+	for slot, bufnr in ipairs(M.opened) do
+		if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) then
+			-- leading token is the bufnr so the buffer stays identifiable even if
+			-- the user reorders lines
+			lines[#lines + 1] = string.format("%d %s", bufnr, vim.api.nvim_buf_get_name(bufnr))
+		end
+	end
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+end
+
+--- Parse the edited manager lines and apply as the new slot order.
+local function manager_apply(buf)
+	local seen, order = {}, {}
+	for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+		local bufnr = tonumber(line:match("^%s*(%d+)"))
+		if bufnr and not seen[bufnr] and vim.api.nvim_buf_is_valid(bufnr) then
+			seen[bufnr] = true
+			order[#order + 1] = bufnr
+		end
+	end
+	local next_slot = 1
+	for _, bufnr in ipairs(order) do
+		if next_slot > #M.opened then break end
+		M.opened[next_slot] = bufnr
+		next_slot = next_slot + 1
+	end
+	while next_slot <= #M.opened do
+		M.opened[next_slot] = -1
+		next_slot = next_slot + 1
+	end
+	refresh_subscribers()
+end
+
+local function manager_open_target()
+	local bufnr = tonumber(vim.fn.expand("<cword>"))
+	if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+		vim.api.nvim_set_current_buf(bufnr)
+	end
+end
+
+local function manager_close_buffer()
+	local bufnr = tonumber(vim.fn.expand("<cword>"))
+	if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+		vim.api.nvim_buf_delete(bufnr, { force = true })
+		manager_render(vim.api.nvim_get_current_buf())
+	end
+end
+
+--- Open the oil-like slot manager in a floating window.
+function M.manager()
+	if not (manager_bufnr and vim.api.nvim_buf_is_valid(manager_bufnr)) then
+		manager_bufnr = vim.api.nvim_create_buf(false, true)
+		vim.bo[manager_bufnr].buftype = "acwrite" -- writes trigger BufWriteCmd
+		vim.api.nvim_buf_set_name(manager_bufnr, "sbnc://slots")
+
+		vim.api.nvim_create_autocmd("BufWriteCmd", {
+			buffer = manager_bufnr,
+			callback = function(args)
+				manager_apply(args.buf)
+				vim.bo[args.buf].modified = false
+			end,
+		})
+		vim.keymap.set("n", "<CR>", manager_open_target, { buffer = manager_bufnr, desc = "Open buffer under cursor" })
+		vim.keymap.set("n", "x", manager_close_buffer, { buffer = manager_bufnr, desc = "Close (bdelete) buffer under cursor" })
+		vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = manager_bufnr, desc = "Close manager" })
+	end
+	manager_render(manager_bufnr)
+	vim.bo[manager_bufnr].modified = false
+
+	local tracked = 0
+	for _, bufnr in ipairs(M.opened) do
+		if bufnr ~= -1 then tracked = tracked + 1 end
+	end
+	vim.cmd(string.format("botright %dsplit sbnc://slots", math.max(3, tracked)))
+	-- NOTE: the manager buffer is already unlisted (nvim_create_buf(false, true)).
+	-- Do NOT touch buflisted here: toggling it fires BufDelete, which our slot
+	-- autocmd would misinterpret as the buffer being closed.
 end
 
 local function get_file_buffers()
