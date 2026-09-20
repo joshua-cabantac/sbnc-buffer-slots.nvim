@@ -224,9 +224,51 @@ local function manager_apply(buf)
 	refresh_subscribers()
 end
 
+local manager_state = nil -- { layout, win, prev_buf }
+
+-- Open the buffer under the cursor. The target opens in a real (non-floating)
+-- window, never inside the tiny manager overlay: for the float layout the
+-- overlay closes after picking; for "full" the buffer replaces the manager
+-- in place (oil-style); for "split" the previous window is used.
 local function manager_open_target()
 	local bufnr = tonumber(vim.fn.expand("<cword>"))
-	if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+	if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then
+		return
+	end
+	local state = manager_state or {}
+	local mgr_win = state.win
+
+	if vim.api.nvim_get_current_win() == mgr_win and state.layout == "full" then
+		vim.api.nvim_set_current_buf(bufnr)
+		return
+	end
+
+	-- find a normal window to open the target in (not the manager window)
+	local target = nil
+	if state.layout == "split" then
+		local prev = vim.fn.win_getid(vim.fn.winnr("#"))
+		if prev ~= mgr_win and vim.api.nvim_win_is_valid(prev) then
+			target = prev
+		end
+	end
+	if not target then
+		for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+			if win ~= mgr_win and vim.api.nvim_win_is_valid(win)
+				and vim.api.nvim_win_get_config(win).relative == "" then
+				target = win
+				break
+			end
+		end
+	end
+
+	if target then
+		vim.api.nvim_set_current_win(target)
+		vim.api.nvim_set_current_buf(bufnr)
+		if state.layout == "float" and mgr_win and vim.api.nvim_win_is_valid(mgr_win) then
+			vim.api.nvim_win_close(mgr_win, true)
+		end
+	else
+		-- manager is the only window: open in place
 		vim.api.nvim_set_current_buf(bufnr)
 	end
 end
@@ -238,8 +280,6 @@ local function manager_close_buffer()
 		manager_render(vim.api.nvim_get_current_buf())
 	end
 end
-
-local manager_state = nil -- { layout, win, prev_buf }
 
 local function manager_quit()
 	local state = manager_state or {}
@@ -288,7 +328,7 @@ function M.manager(opts)
 	vim.bo[manager_bufnr].modified = false
 
 	if layout == "full" then
-		manager_state = { layout = "full", prev_buf = vim.api.nvim_get_current_buf() }
+		manager_state = { layout = "full", win = vim.api.nvim_get_current_win(), prev_buf = vim.api.nvim_get_current_buf() }
 		vim.api.nvim_set_current_buf(manager_bufnr)
 		return
 	end
@@ -301,7 +341,7 @@ function M.manager(opts)
 
 	if layout == "split" then
 		vim.cmd(string.format("botright %dsplit sbnc://slots", height))
-		manager_state = { layout = "split" }
+		manager_state = { layout = "split", win = vim.api.nvim_get_current_win() }
 		return
 	end
 
