@@ -84,7 +84,17 @@ vim.keymap.set("n", "<leader>bn", slots.next, { desc = "Next file buffer" })
 vim.keymap.set("n", "<leader>bp", slots.prev, { desc = "Previous file buffer" })
 vim.keymap.set("n", "<leader>bl", slots.list, { desc = "List slots" })
 vim.keymap.set("n", "<leader>br", slots.compact, { desc = "Compact slots" })
-vim.keymap.set("n", "<leader>bo", slots.manager, { desc = "Open slot manager" })
+vim.keymap.set("n", "<leader>bf", function() slots.manager({ layout = "float" }) end,
+  { desc = "Open slot manager" })
+-- buffer only: close all buffers except the current one (config-side, not plugin)
+vim.keymap.set("n", "<leader>bo", function()
+  local cur = vim.api.nvim_get_current_buf()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if bufnr ~= cur and vim.api.nvim_buf_is_valid(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = false })
+    end
+  end
+end, { desc = "Close all buffers but current" })
 ```
 
 ### Compacting (`compact()`)
@@ -95,19 +105,30 @@ buffers' relative order. Only real file buffers count as content; blank
 (unnamed) buffers stay tracked but get pushed to the tail slots so they don't
 clutter the front.
 
-### Slot manager (`manager()`)
+### Slot manager (`manager(opts)`)
 
-Opens a bottom split listing one slot per line, oil-style: **the buffer is the
-config**. Edit the lines, then write (`:w`) to apply:
+Opens an oil-like view listing one slot per line: **the buffer is the config**.
+Edit the lines, then write (`:w`) to apply:
 
 - **Reorder lines** to reorder slots
 - **Delete a line** to remove that buffer from its slots
 - `<CR>` — open the buffer under the cursor
 - `x` — close (bdelete) the buffer under the cursor
-- `q` — close the manager window
+- `q` — close the manager
 
 Each line starts with the buffer number so buffers stay identifiable no matter
 how you rearrange them.
+
+Three layouts are available via `opts.layout`:
+
+```lua
+require("sbnc_buffer_slots").manager({ layout = "float" })  -- default: centered overlay
+require("sbnc_buffer_slots").manager({ layout = "full" })   -- current window, oil-style
+require("sbnc_buffer_slots").manager({ layout = "split" })  -- bottom split
+```
+
+In `"full"` mode, `q` restores the buffer you came from; in `"float"` mode it
+closes the overlay.
 
 ## How buffers are counted
 

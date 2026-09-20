@@ -239,8 +239,35 @@ local function manager_close_buffer()
 	end
 end
 
---- Open the oil-like slot manager in a floating window.
-function M.manager()
+local manager_state = nil -- { layout, win, prev_buf }
+
+local function manager_quit()
+	local state = manager_state or {}
+	if state.layout == "float" then
+		if state.win and vim.api.nvim_win_is_valid(state.win) then
+			vim.api.nvim_win_close(state.win, true)
+		end
+	elseif state.layout == "full" then
+		-- oil-style: restore the buffer we came from
+		if state.prev_buf and vim.api.nvim_buf_is_valid(state.prev_buf) then
+			vim.api.nvim_set_current_buf(state.prev_buf)
+		else
+			vim.cmd("enew")
+		end
+	else
+		vim.cmd("close")
+	end
+end
+
+--- Open the oil-like slot manager. Layouts:
+---   "float" (default) - centered overlay
+---   "full"            - current window, oil-style; q restores previous buffer
+---   "split"           - bottom split
+---@param opts { layout: "float"|"full"|"split" }?
+function M.manager(opts)
+	opts = opts or {}
+	local layout = opts.layout or "float"
+
 	if not (manager_bufnr and vim.api.nvim_buf_is_valid(manager_bufnr)) then
 		manager_bufnr = vim.api.nvim_create_buf(false, true)
 		vim.bo[manager_bufnr].buftype = "acwrite" -- writes trigger BufWriteCmd
@@ -255,19 +282,46 @@ function M.manager()
 		})
 		vim.keymap.set("n", "<CR>", manager_open_target, { buffer = manager_bufnr, desc = "Open buffer under cursor" })
 		vim.keymap.set("n", "x", manager_close_buffer, { buffer = manager_bufnr, desc = "Close (bdelete) buffer under cursor" })
-		vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = manager_bufnr, desc = "Close manager" })
+		vim.keymap.set("n", "q", manager_quit, { buffer = manager_bufnr, desc = "Close manager" })
 	end
 	manager_render(manager_bufnr)
 	vim.bo[manager_bufnr].modified = false
+
+	if layout == "full" then
+		manager_state = { layout = "full", prev_buf = vim.api.nvim_get_current_buf() }
+		vim.api.nvim_set_current_buf(manager_bufnr)
+		return
+	end
 
 	local tracked = 0
 	for _, bufnr in ipairs(M.opened) do
 		if bufnr ~= -1 then tracked = tracked + 1 end
 	end
-	vim.cmd(string.format("botright %dsplit sbnc://slots", math.max(3, tracked)))
-	-- NOTE: the manager buffer is already unlisted (nvim_create_buf(false, true)).
-	-- Do NOT touch buflisted here: toggling it fires BufDelete, which our slot
-	-- autocmd would misinterpret as the buffer being closed.
+	local height = math.max(3, tracked)
+
+	if layout == "split" then
+		vim.cmd(string.format("botright %dsplit sbnc://slots", height))
+		manager_state = { layout = "split" }
+		return
+	end
+
+	-- floating overlay, centered
+	local width = math.floor(vim.o.columns * 0.6)
+	local ui_width = vim.o.columns
+	local ui_height = vim.o.lines
+	local win = vim.api.nvim_open_win(manager_bufnr, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		col = math.floor((ui_width - width) / 2),
+		row = math.floor((ui_height - height) / 2),
+		anchor = "NW",
+		style = "minimal",
+		border = "rounded",
+		title = " buffer slots ",
+		title_pos = "center",
+	})
+	manager_state = { layout = "float", win = win }
 end
 
 local function get_file_buffers()
