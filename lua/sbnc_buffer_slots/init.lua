@@ -207,9 +207,14 @@ manager_render = function(buf)
 	local lines = {}
 	for slot, bufnr in ipairs(M.opened) do
 		if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) then
-			-- leading token is the bufnr so the buffer stays identifiable even if
-			-- the user reorders lines
-			lines[#lines + 1] = string.format("%d %s", bufnr, vim.api.nvim_buf_get_name(bufnr))
+			local name = vim.api.nvim_buf_get_name(bufnr)
+			local fname = vim.fn.fnamemodify(name, ":t")
+			if name == "" then
+				fname = "[No Name]"
+			end
+			-- leading token is the bufnr (hidden identifier parsed by <CR>/x),
+			-- then the slot number, then just the filename — no full path.
+			lines[#lines + 1] = string.format("%d %d. %s", bufnr, slot, fname)
 		end
 	end
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -393,7 +398,7 @@ function M.manager(opts)
 	end
 
 	if layout == "sidebar" then
-		local width = opts.width or 36
+		local width = opts.width or 24
 		vim.cmd(string.format("botright %dvsplit sbnc://slots", width))
 		manager_state = { layout = "sidebar", win = vim.api.nvim_get_current_win() }
 		vim.wo[manager_state.win].winfixwidth = true
