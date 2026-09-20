@@ -1,5 +1,12 @@
 local M = {}
 
+-- Manager/sidebar UI state. Declared at the top so both M.main's sync autocmd
+-- and the manager functions (defined below) capture the SAME locals.
+local manager_state = nil
+local manager_bufnr = nil
+local manager_render -- forward declaration; assigned below, called by the sync autocmd
+local sync_sidebar -- forward declaration; re-renders the sidebar if it is open
+
 local function is_file_buffer(buf)
 	return vim.api.nvim_buf_get_name(buf) ~= "" and vim.bo[buf].buflisted and vim.bo[buf].buftype == ""
 end
@@ -34,6 +41,7 @@ local function delete_buffer(buffer)
 				break
 			end
 		end
+		sync_sidebar()
 	end)
 end
 
@@ -86,6 +94,13 @@ function M.main()
 
 	-- Auto-integrate with bufferline.nvim (no-op if it isn't installed).
 	M.integrate_bufferline()
+
+	-- Keep the sidebar (if open) in sync with buffer changes.
+	vim.api.nvim_create_autocmd({ "BufEnter", "BufAdd", "BufDelete", "BufWipeout" }, {
+		callback = function()
+			sync_sidebar()
+		end,
+	})
 end
 
 local function switch_buffer(slot)
@@ -187,9 +202,8 @@ end
 -- its slot, write (:w) to apply. <CR> opens the buffer under the cursor,
 -- x closes (bdelete) the buffer under the cursor, q closes the window.
 -- ---------------------------------------------------------------
-local manager_bufnr = nil
 
-local function manager_render(buf)
+manager_render = function(buf)
 	local lines = {}
 	for slot, bufnr in ipairs(M.opened) do
 		if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) then
@@ -199,6 +213,15 @@ local function manager_render(buf)
 		end
 	end
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+end
+
+sync_sidebar = function()
+	local state = manager_state
+	if state and state.layout == "sidebar" and state.win
+		and vim.api.nvim_win_is_valid(state.win)
+		and manager_bufnr and vim.api.nvim_buf_is_valid(manager_bufnr) then
+		manager_render(manager_bufnr)
+	end
 end
 
 --- Parse the edited manager lines and apply as the new slot order.
@@ -242,8 +265,6 @@ local function manager_apply(buf)
 	end
 	refresh_subscribers()
 end
-
-local manager_state = nil -- { layout, win, prev_buf }
 
 -- Open the buffer under the cursor. The target opens in a real (non-floating)
 -- window, never inside the tiny manager overlay: for the float layout the
@@ -313,6 +334,12 @@ local function manager_quit()
 		else
 			vim.cmd("enew")
 		end
+	elseif state.layout == "sidebar" then
+		if state.win and vim.api.nvim_win_is_valid(state.win) then
+			vim.api.nvim_win_close(state.win, true)
+		end
+		manager_state = nil
+		return
 	else
 		vim.cmd("close")
 	end
@@ -322,7 +349,8 @@ end
 ---   "float" (default) - centered overlay
 ---   "full"            - current window, oil-style; q restores previous buffer
 ---   "split"           - bottom split
----@param opts { layout: "float"|"full"|"split" }?
+---   "sidebar"         - persistent right-side vertical list
+---@param opts { layout: "float"|"full"|"split"|"sidebar", width: integer? }?
 function M.manager(opts)
 	opts = opts or {}
 	local layout = opts.layout or "float"
@@ -364,6 +392,14 @@ function M.manager(opts)
 		return
 	end
 
+	if layout == "sidebar" then
+		local width = opts.width or 36
+		vim.cmd(string.format("botright %dvsplit sbnc://slots", width))
+		manager_state = { layout = "sidebar", win = vim.api.nvim_get_current_win() }
+		vim.wo[manager_state.win].winfixwidth = true
+		return
+	end
+
 	-- floating overlay, centered
 	local width = math.floor(vim.o.columns * 0.6)
 	local ui_width = vim.o.columns
@@ -381,6 +417,20 @@ function M.manager(opts)
 		title_pos = "center",
 	})
 	manager_state = { layout = "float", win = win }
+end
+
+--- Toggle the vertical slot sidebar on the right (like a bufferline sidebar).
+--- Re-renders live as buffers open/close. Same keys as the manager: <CR>
+--- opens, x closes the buffer under the cursor, edit+write reassigns slots.
+---@param opts { width: integer? }?
+function M.sidebar(opts)
+	opts = opts or {}
+	if manager_state and manager_state.layout == "sidebar"
+		and manager_state.win and vim.api.nvim_win_is_valid(manager_state.win) then
+		manager_quit()
+		return
+	end
+	M.manager({ layout = "sidebar", width = opts.width })
 end
 
 local function get_file_buffers()

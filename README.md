@@ -87,6 +87,7 @@ vim.keymap.set("n", "<leader>br", slots.compact, { desc = "Compact slots" })
 -- <leader><space> == <leader><leader> (leader is space); overwrites telescope's buffers picker
 vim.keymap.set("n", "<leader><space>", function() slots.manager({ layout = "float" }) end,
   { desc = "Open slot manager" })
+vim.keymap.set("n", "<leader>bs", function() slots.sidebar() end, { desc = "Toggle slot sidebar" })
 -- buffer only: close all buffers except the current one (config-side, not plugin)
 vim.keymap.set("n", "<leader>bo", function()
   local cur = vim.api.nvim_get_current_buf()
@@ -132,6 +133,20 @@ require("sbnc_buffer_slots").manager({ layout = "split" })  -- bottom split
 
 In `"full"` mode, `q` restores the buffer you came from; in `"float"` mode it
 closes the overlay.
+
+### Slot sidebar (`sidebar()`)
+
+A persistent **vertical sidebar on the right** showing the slots top-to-bottom
+— like a bufferline turned 90°. It stays open while you work and **updates
+live** as buffers open and close.
+
+```lua
+require("sbnc_buffer_slots").sidebar()      -- toggle open/closed
+require("sbnc_buffer_slots").sidebar({ width = 40 })
+```
+
+Same keys as the manager: `<CR>` opens in the main window, `x` closes the
+buffer under the cursor, edit + `:w` reassigns slots.
 
 ## How buffers are counted
 
