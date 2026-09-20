@@ -84,7 +84,8 @@ vim.keymap.set("n", "<leader>bn", slots.next, { desc = "Next file buffer" })
 vim.keymap.set("n", "<leader>bp", slots.prev, { desc = "Previous file buffer" })
 vim.keymap.set("n", "<leader>bl", slots.list, { desc = "List slots" })
 vim.keymap.set("n", "<leader>br", slots.compact, { desc = "Compact slots" })
-vim.keymap.set("n", "<leader>bf", function() slots.manager({ layout = "float" }) end,
+-- <leader><space> == <leader><leader> (leader is space); overwrites telescope's buffers picker
+vim.keymap.set("n", "<leader><space>", function() slots.manager({ layout = "float" }) end,
   { desc = "Open slot manager" })
 -- buffer only: close all buffers except the current one (config-side, not plugin)
 vim.keymap.set("n", "<leader>bo", function()
