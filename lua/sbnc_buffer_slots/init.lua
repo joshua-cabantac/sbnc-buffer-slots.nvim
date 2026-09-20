@@ -151,12 +151,14 @@ local function refresh_subscribers()
 end
 
 -- Close the gaps between slots: move every tracked file buffer into the lowest
--- slot numbers, preserving their relative order. Blank (unnamed) buffers are
--- ignored — they don't count as content — and are pushed to the tail slots so
--- they stay tracked but out of the way. Example: buffers in slots 1, 2, 8
--- become 1, 2, 3.
+-- slot numbers, preserving their relative order, AND pull in any open file
+-- buffers that don't have a slot yet (insert_buffer skips them once slots are
+-- full). Blank (unnamed) buffers are ignored — they don't count as content —
+-- and are pushed to the tail slots so they stay tracked but out of the way.
+-- Example: buffers in slots 1, 2, 8 + an unslotted open file become 1, 2, 3, 4.
 local function compact_slots()
 	local named, blanks, seen = {}, {}, {}
+	-- first: already-tracked buffers, in slot order
 	for _, bufnr in ipairs(M.opened) do
 		if bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr) and not seen[bufnr] then
 			seen[bufnr] = true
@@ -165,6 +167,14 @@ local function compact_slots()
 			else
 				table.insert(blanks, bufnr)
 			end
+		end
+	end
+	-- second: open file buffers with no slot yet (slots may have been full when
+	-- they were opened) — append them, oldest (lowest bufnr) first
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if not seen[bufnr] and is_file_buffer(bufnr) then
+			seen[bufnr] = true
+			table.insert(named, bufnr)
 		end
 	end
 	local next_slot = 1
