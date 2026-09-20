@@ -112,9 +112,11 @@ Opens an oil-like view listing one slot per line: **the buffer is the config**.
 Edit the lines, then write (`:w`) to apply:
 
 - **Reorder lines** to reorder slots
-- **Delete a line** to remove that buffer from its slots
+- **Delete a line** to close (bdelete) that buffer — buffers with unsaved
+  changes are left open instead (you'll get a warning), and simply removed
+  from their slots
 - `<CR>` — open the buffer under the cursor
-- `x` — close (bdelete) the buffer under the cursor
+- `x` — also close (bdelete) the buffer under the cursor
 - `q` — close the manager
 
 Each line starts with the buffer number so buffers stay identifiable no matter

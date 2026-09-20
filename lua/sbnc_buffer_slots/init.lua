@@ -202,6 +202,8 @@ local function manager_render(buf)
 end
 
 --- Parse the edited manager lines and apply as the new slot order.
+--- Buffers whose lines were deleted get closed (bdelete). Buffers with
+--- unsaved changes can't be closed — they're left open but unassigned.
 local function manager_apply(buf)
 	local seen, order = {}, {}
 	for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
@@ -211,6 +213,23 @@ local function manager_apply(buf)
 			order[#order + 1] = bufnr
 		end
 	end
+
+	-- Close buffers that were dropped from the list (oil semantics).
+	-- NOTE: check modified BEFORE deleting — nvim_buf_delete on an unsaved buffer
+	-- raises E89, which pcall catches but Neovim still reports at command level.
+	for _, old in ipairs(M.opened) do
+		if old ~= -1 and not seen[old] and vim.api.nvim_buf_is_valid(old) then
+			if vim.bo[old].modified then
+				vim.notify(
+					string.format("sbnc: buffer %d has unsaved changes — left open (unassigned from slots)", old),
+					vim.log.levels.WARN
+				)
+			else
+				pcall(vim.api.nvim_buf_delete, old, { force = false })
+			end
+		end
+	end
+
 	local next_slot = 1
 	for _, bufnr in ipairs(order) do
 		if next_slot > #M.opened then break end
